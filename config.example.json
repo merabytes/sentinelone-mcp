@@ -1,0 +1,24 @@
+[
+  {
+    "name": "TENANT_NAME",
+    "azure": {
+      "vault_url": "https://your-vault.vault.azure.net/",
+      "tenant_id": "azure-ad-tenant-id",
+      "client_id": "service-principal-client-id",
+      "client_secret": "service-principal-client-secret"
+    },
+    "secrets": {
+      "login_email": "S1-LOGIN-EMAIL",
+      "login_password": "S1-LOGIN-PASSWORD",
+      "login_totp": "S1-LOGIN-TOTP",
+      "login_url": "S1-LOGIN-URL",
+      "api_url": "S1-API-URL",
+      "api_key": "SENTINELONE-API-KEY",
+      "xdr_token": "SENTINELONE-XDR-TOKEN",
+      "xdr_region": "S1-XDR-REGION",
+      "site_id": "S1-SITE-ID",
+      "session_cookies": "SENTINELONE-SESSION-COOKIES",
+      "session_cookies_visibility": "SENTINELONE-SESSION-COOKIES-VISIBILITY"
+    }
+  }
+]

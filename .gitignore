@@ -1,0 +1,39 @@
+# Credentials & local config (never commit)
+config.json
+config.*.json
+!config.example.json
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Playwright / browser profiles
+/tmp/s1_*/
+.s1-*-profile/
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs & debug artifacts
+*.log
+/tmp/s1_*.png
