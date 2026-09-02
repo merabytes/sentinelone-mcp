@@ -69,10 +69,18 @@ class KeyVaultHelper:
             return None
         except HttpResponseError as e:
             logger.error("HTTP error retrieving secret '%s': %s", secret_name, e.status_code)
-            return None
+            Path = __import__("pathlib").Path
+            Path("/workspace/sentinelone-mcp/kv_mcp.log").write_text(
+                f"HttpResponseError {e.status_code} {secret_name} {e}\n", encoding="utf-8"
+            )
+            raise RuntimeError(f"Key Vault HTTP {e.status_code} for '{secret_name}': {e}") from e
         except Exception as e:
             logger.error("Unexpected error retrieving secret '%s': %s", secret_name, type(e).__name__)
-            return None
+            Path = __import__("pathlib").Path
+            Path("/workspace/sentinelone-mcp/kv_mcp.log").write_text(
+                f"{type(e).__name__} {secret_name} {e}\n", encoding="utf-8"
+            )
+            raise RuntimeError(f"Key Vault {type(e).__name__} for '{secret_name}': {e}") from e
 
     def set_secret(self, secret_name: str, secret_value: str) -> bool:
         try:

@@ -766,10 +766,9 @@ class SentinelOneHelper(DagNotifier, BaseHelper):
     @dag_node('sentinelone__get_rules', label='get rules')
     def get_rules(self, scan_id: str = '', **kwargs) -> dict:
         """Retrieve cloud detection rules for the account."""
-        params = {
-            'limit': '1000',
-            'accountIds': self.account_id,
-        }
+        params = {'limit': '1000'}
+        if self.account_id:
+            params['accountIds'] = self.account_id
         url = f'{self.api_url}/web/api/v2.1/cloud-detection/rules'
         return self.fetch(url, params)
 
@@ -907,7 +906,7 @@ class SentinelOneHelper(DagNotifier, BaseHelper):
             limit:      Maximum number of threats to return (default 10).
             sort_by:    Field to sort by (default 'createdAt').
             sort_order: 'asc' or 'desc' (default 'desc').
-            filters:    Optional dict of extra query params (e.g. {'incidentStatus': 'unresolved'}).
+            filters:    Optional dict of extra query params (e.g. {'incidentStatuses': 'unresolved'}).
 
         Returns:
             list of dicts with keys: id, threatName, storyline, processUser,
@@ -937,6 +936,7 @@ class SentinelOneHelper(DagNotifier, BaseHelper):
                 'maliciousProcessArguments': ti.get('maliciousProcessArguments'),
                 'originatorProcess':         ti.get('originatorProcess'),
                 'initiatedByDescription':    ti.get('initiatedByDescription'),
+                'analystVerdict':             ti.get('analystVerdict'),
             })
         return out
 
@@ -1033,7 +1033,7 @@ class SentinelOneHelper(DagNotifier, BaseHelper):
             list of dicts with keys: id, threatName, storyline, processUser,
             agentComputerName, createdAt, incidentStatus, mitigationStatus.
         """
-        filters: dict = {'incidentStatus': 'unresolved'}
+        filters: dict = {'incidentStatuses': 'unresolved'}
         if hours_back:
             from datetime import datetime, timedelta, timezone as _tz
             since = (datetime.now(_tz.utc) - timedelta(hours=hours_back)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
@@ -1072,13 +1072,10 @@ class SentinelOneHelper(DagNotifier, BaseHelper):
             f'{self.api_url}/web/api/v2.1/threats/analyst-verdict',
             {'data': {'analystVerdict': analyst_verdict}, 'filter': {'ids': ids}},
         )
-        # Mark as resolved
-        resolve_data: dict = {}
-        if note:
-            resolve_data['note'] = note
+        # Resolve incident status (mark-as-resolved 404s on Management API v2.1)
         self.post(
-            f'{self.api_url}/web/api/v2.1/threats/mark-as-resolved',
-            {'data': resolve_data, 'filter': {'ids': ids}},
+            f'{self.api_url}/web/api/v2.1/threats/incident',
+            {'data': {'incidentStatus': 'resolved'}, 'filter': {'ids': ids}},
         )
         return {'ok': True, 'resolved': ids, 'analyst_verdict': analyst_verdict}
 

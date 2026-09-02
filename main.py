@@ -10,7 +10,14 @@ Usage:
 
 import argparse
 import logging
+import os
 import sys
+
+# SOC L2 desktop — headed Playwright Chromium must stay on :6 across MCP restarts.
+os.environ["DISPLAY"] = ":6"
+_xauth = "/tmp/s1_xauth_display6"
+if os.path.exists(_xauth):
+    os.environ["XAUTHORITY"] = _xauth
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,7 +29,19 @@ logger = logging.getLogger(__name__)
 MODES = ["login", "create_alert", "mcp"]
 
 
+def _apply_purple_display() -> None:
+    """Hard-lock headed Chromium to SOC L2 desktop DISPLAY=:6."""
+    from pathlib import Path
+    Path("/workspace/sentinelone-mcp/purple_display.env").write_text(":6\n")
+    os.environ["DISPLAY"] = ":6"
+    os.environ["PURPLE_DISPLAY"] = ":6"
+    xauth = "/tmp/s1_xauth_display6"
+    if Path(xauth).is_file():
+        os.environ["XAUTHORITY"] = xauth
+
+
 def main():
+    _apply_purple_display()
     parser = argparse.ArgumentParser(description="SentinelOne MCP")
     parser.add_argument(
         "--mode",

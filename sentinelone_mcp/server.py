@@ -7,6 +7,7 @@ Investigation tools delegate to helpers/sentinelone.py (SentinelOneHelper).
 
 from __future__ import annotations
 
+import atexit
 import asyncio
 import logging
 import sys
@@ -22,8 +23,9 @@ from fastmcp import FastMCP
 from login import run_login_all_tenants
 from helpers.tenant_config import load_tenant_configs
 from create_alert import run_create_alert_mode
-from purple_ai import ask_purple_ai, reset_purple_session
+from purple_ai import PURPLE_ASK_TIMEOUT, ask_purple_ai, force_close_owned_profiles, reset_purple_session
 from helpers.s1_factory import resolve_s1_helper, resolve_xdr_helper
+from sentinelone_mcp.s1_watch_thread import start_watch_thread
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +110,43 @@ async def get_alerts(
 
 @mcp.tool(
     description=(
+        "List SentinelOne STAR / cloud-detection rules including name, description, "
+        "status, severity, and S1QL body (the custom rule contents)."
+    )
+)
+async def get_cloud_detection_rules(
+    tenant: str | None = None,
+    limit: int = 200,
+    name_contains: str | None = None,
+) -> dict[str, Any]:
+    s1 = resolve_s1_helper(tenant)
+    raw = await asyncio.to_thread(s1.get_rules)
+    rules = raw.get("data", raw) if isinstance(raw, dict) else raw
+    if not isinstance(rules, list):
+        return {"error": "unexpected rules payload", "raw_type": type(raw).__name__}
+    slim = []
+    needle_l = (name_contains or "").lower()
+    for rule in rules:
+        name = rule.get("name") or ""
+        if needle_l and needle_l not in name.lower() and needle_l not in (rule.get("s1ql") or "").lower():
+            continue
+        slim.append({
+            "id": rule.get("id"),
+            "name": name,
+            "description": rule.get("description"),
+            "status": rule.get("status"),
+            "severity": rule.get("severity"),
+            "treatAsThreat": rule.get("treatAsThreat"),
+            "queryType": rule.get("queryType"),
+            "s1ql": rule.get("s1ql"),
+        })
+        if len(slim) >= limit:
+            break
+    return {"count": len(slim), "total": len(rules), "rules": slim}
+
+
+@mcp.tool(
+    description=(
         "Fetch recent SentinelOne threats. Returns threatName, storyline, user, computer, "
         "status, engines, maliciousProcessArguments, originatorProcess, initiatedByDescription."
     )
@@ -119,7 +158,7 @@ async def get_threats(
     incident_status: str | None = None,
 ) -> dict[str, Any]:
     s1 = resolve_s1_helper(tenant)
-    filters = {"incidentStatus": incident_status} if incident_status else None
+    filters = {"incidentStatuses": incident_status} if incident_status else None
     threats = await asyncio.to_thread(
         s1.get_threats,
         limit=limit,
@@ -292,23 +331,41 @@ async def mark_threat_resolved(
 
 # ── Purple AI ────────────────────────────────────────────────────────────────
 
+# FastMCP tool timeout: stdio/server budget for headed login+fill+send.
+# Old: decorator timeout unset (None) + purple_ai_query timeout_seconds default 90
+#      (90s was only the ConversationFeed wait; login/MFA/nav + save-password
+#      overlay made Cursor MCP clients hit JSON-RPC -32001).
+# New: 600s FastMCP fail_after budget; inner ConversationFeed wait is
+#      PURPLE_ASK_TIMEOUT (240s, was 90s).
+PURPLE_MCP_TOOL_TIMEOUT = 600
+
 @mcp.tool(
     description=(
         "Ask SentinelOne Purple AI a natural-language query. "
         "Uses Playwright headful; reuses browser session across calls."
-    )
+    ),
+    timeout=PURPLE_MCP_TOOL_TIMEOUT,
 )
 async def purple_ai_query(
     query: str,
     tenant: str | None = None,
-    timeout_seconds: int = 90,
+    timeout_seconds: int = PURPLE_ASK_TIMEOUT,
 ) -> dict[str, Any]:
     if not query.strip():
         return {"error": "query must not be empty"}
-    result = await asyncio.to_thread(
-        ask_purple_ai, query.strip(), tenant, timeout_seconds
-    )
-    return {"success": True, **result}
+    try:
+        result = await asyncio.to_thread(
+            ask_purple_ai, query.strip(), tenant, timeout_seconds
+        )
+        return {"success": True, **result}
+    except asyncio.CancelledError:
+        # FastMCP/stdio timeout: the worker thread may still hold Chromium.
+        logger.warning("purple_ai_query cancelled; force-closing Purple Chromium")
+        try:
+            await asyncio.to_thread(force_close_owned_profiles)
+        except Exception:
+            logger.exception("force-close after purple_ai_query cancel failed")
+        raise
 
 
 @mcp.tool(description="Reset cached Purple AI browser session (forces re-login on next query).")
@@ -323,6 +380,8 @@ def main() -> None:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         stream=sys.stderr,
     )
+    atexit.register(force_close_owned_profiles)
+    start_watch_thread()
     mcp.run()
 
 

@@ -1,6 +1,6 @@
 # Core — MCP + login + S1 Management API investigation
 fastmcp>=2.0.0
-playwright-core>=1.61.0
+playwright>=1.61.0
 azure-identity>=1.19.0
 azure-keyvault-secrets>=4.9.0
 requests>=2.32.0
