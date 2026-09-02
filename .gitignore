@@ -37,3 +37,29 @@ venv/
 # Logs & debug artifacts
 *.log
 /tmp/s1_*.png
+
+# Local hunts / probes / one-off DFIR scratch (never commit)
+hunt_*
+probe_*
+winlogon_*
+_pub_*
+dv_sedatex*
+dv_s1ql*
+ask_purple*
+patch_*
+fetch_*.py
+filter_rules.py
+inventory_star_rules.py
+list_kv_names.py
+check_cookie_len.py
+apply_mcp_fix.py
+ensure_purple_chromium.sh
+publish_winlogon*
+purple_display.env
+purple_s1ql_convert.json
+pw_smoke.py
+s1-*-watch.py
+summarize_xdr.py
+test_unresolved.py
+helpers/purple_cookies.py
+helpers/purple_orphan_reaper.py
