@@ -781,8 +781,11 @@ class PurpleAISession:
         return data or {"loading": True}
 
     def _wait_for_response(self, prev_count: int, timeout: int) -> tuple[dict[str, Any], str, int]:
-        logger.info("Waiting for Purple AI ConversationFeed item to complete...")
-        deadline = time.time() + timeout
+        start = time.time()
+        deadline = start + timeout
+        status_interval = 5.0
+        last_status = start
+        logger.info("Procesando consulta con Purple AI...")
         while time.time() < deadline:
             current = self._count_feed_items()
             if current > prev_count:
@@ -790,10 +793,19 @@ class PurpleAISession:
                 if not data.get("loading") and (data.get("query") or data.get("summary") or data.get("rowCount")):
                     text = format_purple_response(data)
                     if text:
-                        logger.info("ConversationFeed complete — closing browser")
+                        logger.info("Respuesta completada (%.1fs)", time.time() - start)
                         return data, text, current
+            now = time.time()
+            if now - last_status >= status_interval:
+                logger.info(
+                    "Procesando... (%ds transcurridos, timeout %ds)",
+                    int(now - start),
+                    timeout,
+                )
+                last_status = now
             time.sleep(0.4)
 
+        logger.warning("Timeout (%ds) esperando respuesta de Purple AI", timeout)
         data = self._extract_response()
         text = format_purple_response(data) or "[Sin respuesta tras timeout]"
         return data, text, self._count_feed_items()
@@ -849,6 +861,7 @@ class PurpleAISession:
                 _rmtree_unique_profile(self.user_data_dir)
                 return
             self._closed = True
+            logger.info("Cerrando navegador de Purple AI...")
             try:
                 _cdp_browser_close(self.context, self.page)
             except Exception as e:
@@ -872,6 +885,7 @@ class PurpleAISession:
             if leftover:
                 logger.info("Killed leftover Purple Chromium pids %s for %s", leftover, self.user_data_dir)
             _rmtree_unique_profile(self.user_data_dir)
+            logger.info("Navegador cerrado")
 
 
 _session: PurpleAISession | None = None
@@ -897,6 +911,7 @@ def ask_purple_ai(query: str, tenant_name: str | None = None, timeout: int = PUR
     try:
         return _session.ask(query, timeout=timeout)
     finally:
+        # Respuesta recibida (o timeout) — cerrar el navegador automáticamente.
         _session.close()
         _session = None
         _session_tenant = None
